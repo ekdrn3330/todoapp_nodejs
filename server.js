@@ -30,18 +30,6 @@ app.get('/write', (req, res)=>{
     res.render('write.ejs');
 });
 
-app.post('/add', (req,res)=>{
-    db.collection('counter').findOne({name : '게시물갯수'}, (err, result)=>{
-        console.log(result.totalPost);
-        var totalPost = result.totalPost;
-        db.collection('post').insertOne({_id : totalPost+1, 제목 : req.body.title, 날짜 : req.body.date},(err, result)=>{
-            console.log('저장완료');
-        });
-        db.collection('counter').updateOne({name : '게시물갯수'},{$inc : {totalPost:1}},(err, result)=>{if(err){return console.log(err);}});
-        res.redirect('/list');
-    });
-});
-
 app.get('/list', (req, res)=>{
     db.collection('post').find().toArray((err, result)=>{
         console.log(result);
@@ -50,19 +38,20 @@ app.get('/list', (req, res)=>{
 });
 
 app.get('/search', (req, res)=>{
-    console.log(req.query.value);
-    db.collection('post').find({제목 : req.query.value}).toArray((err, result)=>{
+    var 검색조건 = [
+        {
+          $search: {
+            index: 'titleSearch',
+            text: {
+              query: req.query.value,
+              path: '제목'  // 제목날짜 둘다 찾고 싶으면 ['제목', '날짜']
+            }
+          }
+        }
+    ]
+    db.collection('post').aggregate(검색조건).toArray((err, result)=>{
         console.log(result);
         res.render('search.ejs', {posts : result});
-    });
-});
-
-app.delete('/delete', (req, res)=>{
-    console.log(req.body);
-    req.body._id = parseInt(req.body._id);
-    db.collection('post').deleteOne(req.body, (err, result)=>{
-        console.log('삭제완료');
-        res.status(200).send({message : '성공했습니다'});
     });
 });
 
@@ -165,4 +154,32 @@ passport.deserializeUser(function(아이디, done){
     });
 });
 
+app.post('/register', (req, res)=>{
+    db.collection('login').insertOne({ id : req.body.id, pw : req.body.pw }, (err, result)=>{
+        res.redirect('/');
+    });
+});
 
+app.post('/add', (req,res)=>{
+    db.collection('counter').findOne({name : '게시물갯수'}, (err, result)=>{
+        console.log(result.totalPost);
+        var totalPost = result.totalPost;
+        var 저장할거 = {_id : totalPost+1, 작성자 : req.user._id, 제목 : req.body.title, 날짜 : req.body.date}
+        db.collection('post').insertOne(저장할거,(err, result)=>{
+            console.log('저장완료');
+        });
+        db.collection('counter').updateOne({name : '게시물갯수'},{$inc : {totalPost:1}},(err, result)=>{if(err){return console.log(err);}});
+        res.redirect('/list');
+    });
+});
+
+app.delete('/delete', (req, res)=>{
+    console.log(req.body);
+    req.body._id = parseInt(req.body._id);
+    var 삭제할데이터 = { _id : req.body.id, 작성자 : req.user._id }
+    db.collection('post').deleteOne(삭제할데이터, (err, result)=>{
+        console.log('삭제완료');
+        if(result){console.log(result);}
+        res.status(200).send({message : '성공했습니다'});
+    });
+});
